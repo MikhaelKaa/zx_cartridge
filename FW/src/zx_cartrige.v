@@ -4,7 +4,7 @@
 // CPU adr bus A0...A12 connect directly to CR_ROM chip
 module zx_cartrige #(
     // default example parameter
-    parameter SELF_LOCK_VAL = 10
+    parameter SELF_LOCK_VAL = 15
 )(
     // Reset
     input   reset_n,

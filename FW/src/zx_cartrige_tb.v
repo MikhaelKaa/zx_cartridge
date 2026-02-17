@@ -1,17 +1,27 @@
 `timescale 1ns / 1ps
 
 module tb_zx_cartrige();
+    // Управляющие сигналы
     reg reset_n;
     reg iorq_n;
     reg rd_n;
     reg mreq_n;
-    reg A7, A13, A14, A15;
     
+    // Полная адресная шина (16 бит)
+    reg [15:0] address;
+    
+    // Подключение отдельных бит к DUT
+    wire A7   = address[7];
+    wire A13  = address[13];
+    wire A14  = address[14];
+    wire A15  = address[15];
+    
+    // Выходы DUT
     wire ZX_ROM_blk;
     wire CR_ROM_oe_n;
     wire [5:0] CR_ROM_A;
     
-    // DUT с уменьшенным параметром для быстрой проверки
+    // Тестируемый модуль (с уменьшенным параметром для быстрой проверки)
     zx_cartrige #(
         .SELF_LOCK_VAL(3)
     ) uut (
@@ -28,19 +38,50 @@ module tb_zx_cartrige();
         .CR_ROM_A(CR_ROM_A)
     );
     
+    // Задачи для моделирования циклов Z80
+    // Запись в порт (активируется iorq_n, для инкремента важен его спад)
+    task write_port(input [15:0] addr);
+        begin
+            address = addr;
+            #10;
+            iorq_n = 0;             // начало цикла IN/OUT
+            #10;
+            iorq_n = 1;             // завершение цикла – отрицательный фронт
+            #10;
+        end
+    endtask
+    
+    // Чтение из памяти
+    task read_mem(input [15:0] addr);
+        begin
+            address = addr;
+            #10;
+            mreq_n = 0;             // запрос памяти
+            rd_n   = 0;             // чтение
+            #20;                    // удерживаем для проверки
+            mreq_n = 1;
+            rd_n   = 1;
+            #10;
+        end
+    endtask
+    
+    // Проверка с выводом сообщения
+    task check_equal(input [31:0] expected, input [31:0] actual, input [80*8:0] msg);
+        if (expected !== actual) begin
+            $display("ERROR: %s. Expected %d, got %d", msg, expected, actual);
+        end
+    endtask
+    
     initial begin
-        $dumpfile("tb_zx_cartrige.vcd");
+        $dumpfile("zx_cartrige.vcd");
         $dumpvars(0, tb_zx_cartrige);
         
-        // Исходное состояние: сброс активен
+        // Исходное состояние: сброс активен, все сигналы неактивны
         reset_n = 0;
         iorq_n  = 1;
         rd_n    = 1;
         mreq_n  = 1;
-        A7      = 0;
-        A13     = 0;
-        A14     = 0;
-        A15     = 0;
+        address = 16'h0000;
         #100;
         reset_n = 1;
         #10;
@@ -49,90 +90,103 @@ module tb_zx_cartrige();
         // Test 1: Инкремент происходит только при A7=0 и спаде iorq_n
         // ------------------------------------------------------------
         $display("=== Test 1: Increment condition (A7=0 and iorq_n falling) ===");
+        check_equal(0, CR_ROM_A, "Initial CR_ROM_A");
         
-        if (CR_ROM_A !== 0) $display("ERROR: Initial CR_ROM_A = %d, expected 0", CR_ROM_A);
+        // Попытка с A7=1 – не должен инкрементироваться
+        write_port(16'h0080);       // A7=1 (адрес 0x80)
+        #10;
+        check_equal(0, CR_ROM_A, "After write to port 0x80 (A7=1)");
         
-        // Попытка инкремента с A7=1 – не должен инкрементироваться
-        A7 = 1;
-        iorq_n = 0; // rom_page_up = 0|1|0 = 1 – нет изменения
+        // Корректный инкремент с A7=0
+        write_port(16'h007F);       // A7=0
         #10;
-        iorq_n = 1;
-        #10;
-        if (CR_ROM_A !== 0) $display("ERROR: Increment occurred while A7=1, CR_ROM_A = %d", CR_ROM_A);
+        check_equal(1, CR_ROM_A, "After first write to 0x7F");
         
-        // Теперь A7=0, создаём отрицательный фронт iorq_n
-        A7 = 0;
-        iorq_n = 1;
+        write_port(16'h007F);       // второй раз
         #10;
-        iorq_n = 0; // rom_page_up: 1->0 -> negedge
-        #10;
-        if (CR_ROM_A !== 1) $display("ERROR: No increment when A7=0 and iorq_n falling, CR_ROM_A = %d", CR_ROM_A);
-        
-        iorq_n = 1;
-        #10;
+        check_equal(2, CR_ROM_A, "After second write to 0x7F");
         
         // ------------------------------------------------------------
-        // Test 2: Достижение SELF_LOCK_VAL блокирует активацию CR_ROM_oe_n
+        // Test 2: Достижение SELF_LOCK_VAL (3) блокирует дальнейшие инкременты
         // ------------------------------------------------------------
-        $display("=== Test 2: Self-lock prevents CR_ROM_oe_n activation ===");
-        
-        // Инкрементируем до 2
-        iorq_n = 0; #10; iorq_n = 1; #10; // CR_ROM_A=2
-        iorq_n = 0; #10; iorq_n = 1; #10; // CR_ROM_A=3 (lock)
-        if (CR_ROM_A !== 3) $display("ERROR: Failed to reach lock, CR_ROM_A = %d", CR_ROM_A);
-        
-        // self_lock активен. Проверим, что CR_ROM_oe_n всегда 1 при попытке активации
-        // Необходимые условия: lower_rom=1 (A13=A14=A15=0), rd_n=0, mreq_n=0
-        A13 = 0; A14 = 0; A15 = 0;
-        rd_n = 0;
-        mreq_n = 0;
+        $display("=== Test 2: Self-lock at value 3 ===");
+        write_port(16'h007F);       // третий раз -> lock
         #10;
-        if (CR_ROM_oe_n !== 0) $display("ERROR: CR_ROM_oe_n = %b, expected 1 (self_lock active)", CR_ROM_oe_n);
-        if (ZX_ROM_blk !== 1) $display("ERROR: ZX_ROM_blk = %b, expected 0", ZX_ROM_blk);
+        check_equal(3, CR_ROM_A, "After third write (should lock)");
         
-        rd_n = 1; mreq_n = 1;
+        // Попытка инкремента после блокировки
+        write_port(16'h007F);
         #10;
+        check_equal(3, CR_ROM_A, "Write after lock - no increment");
         
         // ------------------------------------------------------------
-        // Test 3: CR_ROM_oe_n активируется при обращении в нижние 8кб
-        // Условия: lower_rom=1, rd_n=0, mreq_n=0, self_lock=0
+        // Test 3: При self_lock=1 CR_ROM_oe_n не активируется даже в нижней ROM
         // ------------------------------------------------------------
-        $display("=== Test 3: CR_ROM_oe_n activation in lower ROM area ===");
+        $display("=== Test 3: CR_ROM_oe_n inactive while locked ===");
+        read_mem(16'h0100);         // адрес в нижней области (0x100)
+        #10;
+        check_equal(1, CR_ROM_oe_n, "CR_ROM_oe_n during locked read");
+        check_equal(0, ZX_ROM_blk, "ZX_ROM_blk during locked read");
         
-        // Сброс для снятия self_lock
+        // ------------------------------------------------------------
+        // Test 4: Сброс обнуляет счётчик и снимает блокировку
+        // ------------------------------------------------------------
+        $display("=== Test 4: Reset ===");
         reset_n = 0;
-        #10;
+        #20;
         reset_n = 1;
         #10;
-        if (CR_ROM_A !== 0) $display("ERROR: After reset CR_ROM_A = %d, expected 0", CR_ROM_A);
+        check_equal(0, CR_ROM_A, "After reset");
+        check_equal(1, CR_ROM_oe_n, "CR_ROM_oe_n after reset");
         
-        // Устанавливаем условия для активации
-        A13 = 0; A14 = 0; A15 = 0; // lower_rom = 1
-        rd_n = 0;
-        mreq_n = 0;
+        // ------------------------------------------------------------
+        // Test 5: Активация CR_ROM_oe_n при чтении нижних 8KB (self_lock=0)
+        // ------------------------------------------------------------
+        $display("=== Test 5: CR_ROM_oe_n activation in lower ROM (0x0000-0x1FFF) ===");
+        
+        // Чтение внутри нижней области
+        read_mem(16'h0100);
+        #10;
+        check_equal(1, CR_ROM_oe_n, "CR_ROM_oe_n at 0x100");
+        check_equal(0, ZX_ROM_blk, "ZX_ROM_blk at 0x100");
+        
+        read_mem(16'h1FFF);         // граница нижней области
+        #10;
+        check_equal(1, CR_ROM_oe_n, "CR_ROM_oe_n at 0x1FFF");
+        
+        // Чтение вне нижней области
+        read_mem(16'h2000);         // A13=1
+        #10;
+        check_equal(1, CR_ROM_oe_n, "CR_ROM_oe_n at 0x2000 (outside)");
+        
+        read_mem(16'h4001);         // A14=1
+        #10;
+        check_equal(1, CR_ROM_oe_n, "CR_ROM_oe_n at 0x4001 (outside)");
+        
+        // ------------------------------------------------------------
+        // Test 6: Проверка влияния mreq_n и rd_n
+        // ------------------------------------------------------------
+        $display("=== Test 6: Control signals mreq_n and rd_n ===");
+        address = 16'h0100;
         #10;
         
-        // Ожидаем CR_ROM_oe_n = 0 (активен)
-        if (CR_ROM_oe_n !== 0) $display("ERROR: CR_ROM_oe_n = %b, expected 0 during lower ROM access (rd_n=0, mreq_n=0)", CR_ROM_oe_n);
-        if (ZX_ROM_blk !== 1) $display("ERROR: ZX_ROM_blk = %b, expected 1", ZX_ROM_blk);
-        
-        // Проверка, что при выходе из нижней области (lower_rom=0) выход отключается
-        A13 = 1; // теперь lower_rom = 0 (A13=1, остальные 0)
+        // mreq_n=0, rd_n=1 – чтение не активно
+        mreq_n = 0; rd_n = 1;
         #10;
-        if (CR_ROM_oe_n !== 1) $display("ERROR: CR_ROM_oe_n = %b, expected 1 when not in lower ROM", CR_ROM_oe_n);
+        check_equal(1, CR_ROM_oe_n, "CR_ROM_oe_n with rd_n=1");
         
-        // Проверка, что при rd_n=1 выход отключается
-        A13 = 0; // обратно в lower_rom=1
-        rd_n = 1;
+        // mreq_n=1, rd_n=0 – нет запроса памяти
+        mreq_n = 1; rd_n = 0;
         #10;
-        if (CR_ROM_oe_n !== 1) $display("ERROR: CR_ROM_oe_n = %b, expected 1 when rd_n=1", CR_ROM_oe_n);
+        check_equal(1, CR_ROM_oe_n, "CR_ROM_oe_n with mreq_n=1");
         
-        // Проверка, что при mreq_n=1 выход отключается
-        rd_n = 0; mreq_n = 1;
+        // Оба активны – должно включиться
+        mreq_n = 0; rd_n = 0;
         #10;
-        if (CR_ROM_oe_n !== 1) $display("ERROR: CR_ROM_oe_n = %b, expected 1 when mreq_n=1", CR_ROM_oe_n);
+        check_equal(0, CR_ROM_oe_n, "CR_ROM_oe_n with both active");
         
-        rd_n = 1; mreq_n = 1;
+        // Возврат в исходное
+        mreq_n = 1; rd_n = 1;
         #10;
         
         $display("=== All tests completed ===");
