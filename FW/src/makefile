@@ -1,6 +1,6 @@
 # Для тестирования модуля неодходимо чтобы тест назывался %имя_модуля%_tb
 
-TARGET ?= zx_cartrige
+TARGET ?= zx_cartridge
 ICARUS = iverilog
 
 all: 

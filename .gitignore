@@ -9,3 +9,14 @@
 /HW/Project Logs for fix/*.LOG
 /HW/Project Logs for zx_cartridge/*.LOG
 /FW/zx_cartrige_description.txt
+/Content/build
+/Content/tools/zx0/build
+/Content/Batty/batty.sna
+/Content/Batty/loader.asm
+/Content/Batty/loader0.bin
+/Content/Batty/loader1.bin
+/Content/Batty/main.asm
+/Content/Batty/main.bin
+/Content/Batty/main.bin.zx0
+/Content/Batty/screen.scr
+/Content/Batty/screen.scr.zx0
