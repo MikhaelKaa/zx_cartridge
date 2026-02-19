@@ -23,7 +23,9 @@ module zx_cartrige #(
     // Cartrige ROM enable
     output  CR_ROM_oe_n,
     // Up part cartrige ROM adr bus (A13...A18)
-    output  [5:0] CR_ROM_A
+    output  [5:0] CR_ROM_A,
+	 output  [3:0] CR_ROM_CS
+	 
 );
     // CR_ROM 8kb bank counter
     reg [5:0] CR_ROM_bank_cnt = 6'b0;  
@@ -50,6 +52,11 @@ module zx_cartrige #(
 
     assign CR_ROM_oe_n = ~lower_rom | rd_n | mreq_n | self_lock ;
     assign ZX_ROM_blk = ~CR_ROM_oe_n;
+	 assign CR_ROM_CS[0] = CR_ROM_oe_n;
+	 assign CR_ROM_CS[1] = 1'b1;
+	 assign CR_ROM_CS[2] = 1'b1;
+	 assign CR_ROM_CS[3] = 1'b1;
+	 
     assign CR_ROM_A = CR_ROM_bank_cnt;
 
 endmodule

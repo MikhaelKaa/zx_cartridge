@@ -68,3 +68,7 @@ set_location_assignment PIN_27 -to ZX_ROM_blk
 set_location_assignment PIN_24 -to iorq_n
 set_location_assignment PIN_25 -to mreq_n
 set_location_assignment PIN_26 -to rd_n
+set_location_assignment PIN_8 -to CR_ROM_CS[3]
+set_location_assignment PIN_6 -to CR_ROM_CS[2]
+set_location_assignment PIN_5 -to CR_ROM_CS[1]
+set_location_assignment PIN_4 -to CR_ROM_CS[0]
