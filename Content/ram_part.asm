@@ -9,6 +9,17 @@ start:
     ld   a, 0b10000000   
     out  (c), a
 
+    ld   sp, 0x6000
+
+    ld   iy, 23610
+
+wait_any_key:
+    ld   bc, 0x00fe
+    in   a, (c)
+    and  0x1f
+    cp   0x1f
+    jr   z, wait_any_key
+
     jp   0x6800
 
 end:

@@ -4,6 +4,7 @@ build: clean
 	mkdir -p build
 	@${SJASMPLUS} ./ram_part.asm --syntax=F
 	@${SJASMPLUS} ./main.asm --syntax=F
+# 	@${SJASMPLUS} ./test.asm --syntax=F
 
 clean:
 # 	@rm -f -r ./assets/*.zx0
