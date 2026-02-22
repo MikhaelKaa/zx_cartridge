@@ -1,11 +1,16 @@
-/FW/src/*.bak
-/FW/src/*.vcd
-/HW/src/__Previews/*.SchDocPreview
+*.bak
+*.vcd
+*.bin
+*.zx0
+*.scr
+*.qws
+*.LOG
+*.SchDocPreview
 /FW/output_files
 /FW/incremental_db
 /FW/db
 /HW/History
-/FW/*.qws
-/HW/Project Logs for fix/*.LOG
-/HW/Project Logs for zx_cartridge/*.LOG
+
 /FW/zx_cartrige_description.txt
+/HW/Project Outputs for zx_cartridge
+Content/tools/zx0/build/*
